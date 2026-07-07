@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">CamFilter</string>
+
+    <string name="permission_camera_rationale">Camera access is required to preview and filter the live feed.</string>
+    <string name="permission_denied">Camera permission denied — cannot start preview.</string>
+
+    <string name="label_brightness">Brightness</string>
+    <string name="label_contrast">Contrast</string>
+    <string name="label_smoothing">Skin Smoothing</string>
+
+    <string name="filter_none">Normal</string>
+    <string name="filter_grayscale">Grayscale</string>
+    <string name="filter_sepia">Sepia</string>
+
+    <string name="btn_overlay_start">Float Bubble</string>
+    <string name="btn_overlay_stop">Stop Bubble</string>
+
+    <string name="overlay_channel_name">Floating Preview</string>
+    <string name="overlay_notification_title">CamFilter overlay active</string>
+    <string name="overlay_notification_text">Tap to return to the app</string>
+</resources>

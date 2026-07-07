@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="140dp"
+    android:layout_height="140dp">
+
+    <!-- Circular frame showing the latest filtered snapshot -->
+    <ImageView
+        android:id="@+id/bubbleImage"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_bubble"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/overlay_notification_title" />
+
+    <ImageButton
+        android:id="@+id/bubbleClose"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="top|end"
+        android:background="@drawable/bg_bubble"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:contentDescription="@string/btn_overlay_stop" />
+
+</FrameLayout>
