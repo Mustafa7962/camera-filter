@@ -71,7 +71,6 @@
                 android:textColor="@color/white"
                 android:textOn="@string/filter_none"
                 android:textOff="@string/filter_none"
-                android:selected="true"
                 android:checked="true" />
 
             <ToggleButton
