@@ -11,6 +11,12 @@
     <string name="filter_none">Normal</string>
     <string name="filter_grayscale">Grayscale</string>
     <string name="filter_sepia">Sepia</string>
+    <string name="filter_invert">Invert</string>
+    <string name="filter_cool">Cool</string>
+    <string name="filter_warm">Warm</string>
+    <string name="filter_vintage">Vintage</string>
+    <string name="filter_mirror">Mirror</string>
+    <string name="swipe_hint">Swipe left / right for filters</string>
 
     <string name="btn_overlay_start">Float Bubble</string>
     <string name="btn_overlay_stop">Stop Bubble</string>

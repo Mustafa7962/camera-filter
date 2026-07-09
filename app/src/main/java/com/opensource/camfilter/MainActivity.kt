@@ -2,21 +2,25 @@ package com.opensource.camfilter
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Size
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.Surface
 import android.widget.SeekBar
-import android.widget.ToggleButton
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import com.opensource.camfilter.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 /**
  * MainActivity
@@ -27,7 +31,10 @@ import java.util.concurrent.Executors
  *  - Bridge CameraX's Preview use case to [CameraFilterEngine]'s OpenGL Surface —
  *    this is the actual "frame interception" point: instead of handing CameraX a
  *    PreviewView, we hand it a Surface that feeds a GPU texture we control.
- *  - Wire the seek bars / toggle buttons to the engine's filter parameters.
+ *  - Keep the Preview use case's target rotation in sync with the device's physical
+ *    rotation, so the image stays upright whether you're in portrait or landscape.
+ *  - Wire the seek bars to the engine's filter parameters, and let the person swipe
+ *    left/right on the preview to cycle through Snapchat-style color filters.
  *  - Start/stop the floating overlay bubble service.
  */
 class MainActivity : AppCompatActivity() {
@@ -36,6 +43,27 @@ class MainActivity : AppCompatActivity() {
     private lateinit var engine: CameraFilterEngine
     private lateinit var cameraExecutor: ExecutorService
     private var cameraProvider: ProcessCameraProvider? = null
+    private var preview: Preview? = null
+
+    // ---------------------------------------------------------------------------
+    // Snapchat-style swipeable filter carousel
+    // ---------------------------------------------------------------------------
+    // Order here is the order you'll swipe through. Add a new CameraFilterEngine.ColorFilter
+    // value plus a shader branch in CameraFilterEngine.kt, then just add one line here to
+    // include it in the carousel.
+    private val filterCarousel = listOf(
+        CameraFilterEngine.ColorFilter.NONE to R.string.filter_none,
+        CameraFilterEngine.ColorFilter.GRAYSCALE to R.string.filter_grayscale,
+        CameraFilterEngine.ColorFilter.SEPIA to R.string.filter_sepia,
+        CameraFilterEngine.ColorFilter.INVERT to R.string.filter_invert,
+        CameraFilterEngine.ColorFilter.COOL to R.string.filter_cool,
+        CameraFilterEngine.ColorFilter.WARM to R.string.filter_warm,
+        CameraFilterEngine.ColorFilter.VINTAGE to R.string.filter_vintage,
+        CameraFilterEngine.ColorFilter.MIRROR to R.string.filter_mirror
+    )
+    private var filterIndex = 0
+
+    private lateinit var gestureDetector: GestureDetector
 
     private val requestCameraPermission =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
@@ -69,6 +97,8 @@ class MainActivity : AppCompatActivity() {
         binding.glSurfaceView.initialize(engine)
 
         setupControls()
+        setupSwipeGesture()
+        showFilterLabel(animate = false)
 
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -100,11 +130,13 @@ class MainActivity : AppCompatActivity() {
             val provider = providerFuture.get()
             cameraProvider = provider
 
-            val preview = Preview.Builder()
+            val newPreview = Preview.Builder()
                 .setTargetResolution(Size(1280, 720))
+                .setTargetRotation(currentDisplayRotation())
                 .build()
+            preview = newPreview
 
-            preview.setSurfaceProvider { request ->
+            newPreview.setSurfaceProvider { request ->
                 // Tell the SurfaceTexture what resolution to expect *before* handing
                 // the Surface back, otherwise the camera and GL texture sizes can
                 // disagree and frames will appear stretched/cropped.
@@ -112,16 +144,39 @@ class MainActivity : AppCompatActivity() {
                 request.provideSurface(surface, ContextCompat.getMainExecutor(this)) { }
             }
 
-            val cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
+            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
             try {
                 provider.unbindAll()
-                provider.bindToLifecycle(this, cameraSelector, preview)
+                provider.bindToLifecycle(this, cameraSelector, newPreview)
             } catch (e: Exception) {
                 binding.tvStatus.visibility = android.view.View.VISIBLE
                 binding.tvStatus.text = "Camera bind failed: ${e.message}"
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    /**
+     * The activity is declared with android:configChanges in the manifest so Android
+     * does NOT destroy/recreate it on rotation (which would tear down and rebuild the
+     * whole camera + GL session, causing a visible flicker/restart). Instead this
+     * callback fires, and all we need to do is tell CameraX's Preview use case which
+     * way the display is now facing — CameraX combines that with the SurfaceTexture's
+     * own transform matrix to keep the image upright and correctly cropped.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        preview?.targetRotation = currentDisplayRotation()
+        binding.glSurfaceView.requestRender()
+    }
+
+    private fun currentDisplayRotation(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display?.rotation ?: Surface.ROTATION_0
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.rotation
+        }
     }
 
     private fun setupControls() {
@@ -155,23 +210,72 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        val toggles = listOf(binding.btnFilterNone, binding.btnFilterGrayscale, binding.btnFilterSepia)
-        fun selectToggle(selected: ToggleButton, mode: CameraFilterEngine.ColorFilter) {
-            toggles.forEach { it.isChecked = it === selected }
-            engine.colorFilter = mode
-            binding.glSurfaceView.requestRender()
-        }
-        binding.btnFilterNone.setOnClickListener {
-            selectToggle(binding.btnFilterNone, CameraFilterEngine.ColorFilter.NONE)
-        }
-        binding.btnFilterGrayscale.setOnClickListener {
-            selectToggle(binding.btnFilterGrayscale, CameraFilterEngine.ColorFilter.GRAYSCALE)
-        }
-        binding.btnFilterSepia.setOnClickListener {
-            selectToggle(binding.btnFilterSepia, CameraFilterEngine.ColorFilter.SEPIA)
-        }
-
         binding.btnOverlay.setOnClickListener { onOverlayButtonClicked() }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Snapchat-style swipe-to-change-filter
+    // ---------------------------------------------------------------------------
+
+    private fun setupSwipeGesture() {
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float
+            ): Boolean {
+                if (e1 == null) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                // Require a clearly horizontal, deliberate swipe so this doesn't fight
+                // with vertical scrolling/dragging elsewhere on screen.
+                if (abs(dx) > abs(dy) && abs(dx) > 120 && abs(velocityX) > 200) {
+                    if (dx < 0) nextFilter() else previousFilter()
+                    return true
+                }
+                return false
+            }
+        })
+
+        // Swiping anywhere on the live preview cycles filters, exactly like tapping
+        // through Snapchat's filter carousel by swiping the camera screen itself.
+        binding.glSurfaceView.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            true
+        }
+    }
+
+    private fun nextFilter() {
+        filterIndex = (filterIndex + 1) % filterCarousel.size
+        applyCurrentFilter()
+    }
+
+    private fun previousFilter() {
+        filterIndex = (filterIndex - 1 + filterCarousel.size) % filterCarousel.size
+        applyCurrentFilter()
+    }
+
+    private fun applyCurrentFilter() {
+        engine.colorFilter = filterCarousel[filterIndex].first
+        binding.glSurfaceView.requestRender()
+        showFilterLabel(animate = true)
+    }
+
+    /** Briefly shows the current filter's name, like Snapchat's little label when you swipe. */
+    private fun showFilterLabel(animate: Boolean) {
+        binding.tvFilterLabel.text = getString(filterCarousel[filterIndex].second)
+        binding.tvFilterLabel.animate().cancel()
+        if (!animate) {
+            binding.tvFilterLabel.alpha = 1f
+            return
+        }
+        binding.tvFilterLabel.alpha = 1f
+        binding.tvFilterLabel.animate()
+            .alpha(0f)
+            .setStartDelay(900)
+            .setDuration(400)
+            .start()
     }
 
     // ---------------------------------------------------------------------------

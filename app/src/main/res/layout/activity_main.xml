@@ -38,6 +38,39 @@
         tools:text="Camera permission required"
         tools:visibility="visible" />
 
+    <!-- Snapchat-style filter name label: shown briefly whenever you swipe the
+         preview left/right to cycle filters (see MainActivity.showFilterLabel). -->
+    <TextView
+        android:id="@+id/tvFilterLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_pill"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:textColor="@color/white"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginTop="32dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:text="Sepia" />
+
+    <!-- Small persistent hint so swiping is discoverable -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/swipe_hint"
+        android:textColor="@color/white"
+        android:alpha="0.6"
+        android:textSize="11sp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toBottomOf="@id/tvFilterLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Floating control panel -->
     <LinearLayout
         android:id="@+id/controlPanel"
@@ -52,48 +85,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
-
-        <!-- Filter mode toggles -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:weightSum="3"
-            android:layout_marginBottom="12dp">
-
-            <ToggleButton
-                android:id="@+id/btnFilterNone"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:background="@drawable/bg_toggle"
-                android:textColor="@color/white"
-                android:textOn="@string/filter_none"
-                android:textOff="@string/filter_none"
-                android:checked="true" />
-
-            <ToggleButton
-                android:id="@+id/btnFilterGrayscale"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:background="@drawable/bg_toggle"
-                android:textColor="@color/white"
-                android:textOn="@string/filter_grayscale"
-                android:textOff="@string/filter_grayscale" />
-
-            <ToggleButton
-                android:id="@+id/btnFilterSepia"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_toggle"
-                android:textColor="@color/white"
-                android:textOn="@string/filter_sepia"
-                android:textOff="@string/filter_sepia" />
-        </LinearLayout>
 
         <!-- Brightness -->
         <TextView

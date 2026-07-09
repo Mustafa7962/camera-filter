@@ -38,7 +38,7 @@ class CameraFilterEngine(
     private val onSurfaceReady: (Surface) -> Unit
 ) : android.opengl.GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
-    enum class ColorFilter { NONE, GRAYSCALE, SEPIA }
+    enum class ColorFilter { NONE, GRAYSCALE, SEPIA, INVERT, COOL, WARM, VINTAGE, MIRROR }
 
     // ---- Public tunables, safe to set from any thread; read on the GL thread ----
     @Volatile var brightness: Float = 0f       // -1f .. +1f additive
@@ -293,10 +293,11 @@ class CameraFilterEngine(
             uniform float uBrightness;   // -1..1
             uniform float uContrast;     // 0..2
             uniform float uSmoothing;    // 0..1
-            uniform int uFilterMode;     // 0 = none, 1 = grayscale, 2 = sepia
+            uniform int uFilterMode;     // 0 none, 1 grayscale, 2 sepia, 3 invert,
+                                          // 4 cool, 5 warm, 6 vintage, 7 mirror
             uniform vec2 uTexelSize;
 
-            vec3 applySkinSmoothing(vec3 original) {
+            vec3 applySkinSmoothing(vec2 texCoord, vec3 original) {
                 // Cheap real-time "smoothing" approximation: average a small ring of
                 // neighboring texels (a box blur) and blend it back in with the sharp
                 // original. This softens high-frequency detail (skin texture, blemishes)
@@ -305,43 +306,68 @@ class CameraFilterEngine(
                 // fragment shader pass), but it is a lightweight, dependency-free stand-in
                 // that runs comfortably at 30-60fps.
                 vec3 sum = vec3(0.0);
-                sum += texture2D(sTexture, vTexCoord + vec2(-1.0,  0.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2( 1.0,  0.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2( 0.0, -1.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2( 0.0,  1.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2(-1.0, -1.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2( 1.0,  1.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2(-1.0,  1.0) * uTexelSize * 2.0).rgb;
-                sum += texture2D(sTexture, vTexCoord + vec2( 1.0, -1.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2(-1.0,  0.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2( 1.0,  0.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2( 0.0, -1.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2( 0.0,  1.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2(-1.0, -1.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2( 1.0,  1.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2(-1.0,  1.0) * uTexelSize * 2.0).rgb;
+                sum += texture2D(sTexture, texCoord + vec2( 1.0, -1.0) * uTexelSize * 2.0).rgb;
                 vec3 blurred = sum / 8.0;
                 return mix(original, blurred, uSmoothing);
             }
 
             void main() {
-                vec4 texColor = texture2D(sTexture, vTexCoord);
+                // MIRROR folds the right half of the frame onto the left half (a classic
+                // "clone booth" effect). This has to happen to the *sample coordinate*
+                // itself, before any other lookup, so blur/brightness/etc. all agree on
+                // which half of the picture they're looking at.
+                vec2 texCoord = vTexCoord;
+                if (uFilterMode == 7) {
+                    texCoord.x = texCoord.x > 0.5 ? 1.0 - texCoord.x : texCoord.x;
+                }
+
+                vec4 texColor = texture2D(sTexture, texCoord);
                 vec3 color = texColor.rgb;
 
                 // 1) Skin smoothing (box-blur blend)
                 if (uSmoothing > 0.001) {
-                    color = applySkinSmoothing(color);
+                    color = applySkinSmoothing(texCoord, color);
                 }
 
                 // 2) Brightness / contrast: contrast pivots around mid-gray (0.5)
                 //    so increasing contrast doesn't just wash the image out.
                 color = (color - 0.5) * uContrast + 0.5 + uBrightness;
 
-                // 3) Grayscale / sepia color grade toggle
+                // 3) Snapchat-style color grade / effect, selected by swiping in the UI.
                 if (uFilterMode == 1) {
+                    // Grayscale
                     float gray = dot(color, vec3(0.299, 0.587, 0.114));
                     color = vec3(gray);
                 } else if (uFilterMode == 2) {
+                    // Sepia
                     float gray = dot(color, vec3(0.299, 0.587, 0.114));
-                    color = vec3(
-                        gray * 1.07 + 0.02,
-                        gray * 0.86 + 0.01,
-                        gray * 0.63
-                    );
+                    color = vec3(gray * 1.07 + 0.02, gray * 0.86 + 0.01, gray * 0.63);
+                } else if (uFilterMode == 3) {
+                    // Invert
+                    color = 1.0 - color;
+                } else if (uFilterMode == 4) {
+                    // Cool (push toward blue)
+                    color = vec3(color.r - 0.06, color.g + 0.01, color.b + 0.14);
+                } else if (uFilterMode == 5) {
+                    // Warm (push toward orange)
+                    color = vec3(color.r + 0.14, color.g + 0.05, color.b - 0.10);
+                } else if (uFilterMode == 6) {
+                    // Vintage: light sepia tint plus a soft vignette toward the edges
+                    float gray = dot(color, vec3(0.299, 0.587, 0.114));
+                    vec3 sepia = vec3(gray * 1.05 + 0.02, gray * 0.9, gray * 0.7);
+                    color = mix(color, sepia, 0.55);
+                    float dist = distance(vTexCoord, vec2(0.5));
+                    color *= smoothstep(0.85, 0.35, dist);
                 }
+                // uFilterMode == 7 (mirror) needs no extra color grading — the coordinate
+                // fold above already produced the effect.
 
                 gl_FragColor = vec4(clamp(color, 0.0, 1.0), texColor.a);
             }
