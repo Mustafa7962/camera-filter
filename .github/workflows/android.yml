@@ -1,6 +1,9 @@
 name: Android CI - Build APK
 
-on:
+   permissions:
+     contents: write
+
+   on:
   push:
     branches: [ "main" ]
   pull_request:
